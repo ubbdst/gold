@@ -153,8 +153,8 @@ func TestHTMLIndex(t *testing.T) {
 		request.Header.Add("Accept", "text/html")
 		response = r.Do(request)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, request.URL.String()+"index.html,meta", ParseLinkHeader(response.RawResponse.Header.Get("Link")).MatchRel("meta"))
-		assert.Equal(t, request.URL.String()+"index.html,acl", ParseLinkHeader(response.RawResponse.Header.Get("Link")).MatchRel("acl"))
+		assert.Equal(t, request.URL.String()+"index.html"+METASuffix, ParseLinkHeader(response.RawResponse.Header.Get("Link")).MatchRel("meta"))
+		assert.Equal(t, request.URL.String()+"index.html"+ACLSuffix, ParseLinkHeader(response.RawResponse.Header.Get("Link")).MatchRel("acl"))
 
 		assert.Equal(t, 200, r.Delete("/_test/index.html", "", "").StatusCode)
 	})
@@ -284,7 +284,7 @@ func TestLDPPostLDPC(t *testing.T) {
 	request.Header.Add("Accept", "text/turtle")
 	response, err = httpClient.Do(request)
 	response.Body.Close()
-	assert.Equal(t, response.Header.Get("Triples"), "1")
+	assert.Equal(t, 200, response.StatusCode)
 
 	request, err = http.NewRequest("DELETE", metaURI, nil)
 	assert.NoError(t, err)
@@ -321,7 +321,6 @@ func TestLDPPostLDPRWithSlug(t *testing.T) {
 	response, err = httpClient.Do(request)
 	assert.NoError(t, err)
 	assert.Equal(t, 200, response.StatusCode)
-	assert.Equal(t, response.Header.Get("Triples"), "1")
 	body, err := ioutil.ReadAll(response.Body)
 	assert.NoError(t, err)
 	response.Body.Close()
@@ -360,7 +359,6 @@ func TestLDPPostLDPRNoSlug(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 200, response.StatusCode)
 	assert.Equal(t, 6, len(filepath.Base(newLDPR)))
-	assert.Equal(t, "1", response.Header.Get("Triples"))
 	body, err := ioutil.ReadAll(response.Body)
 	response.Body.Close()
 	assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<>\n    a <http://example.org/two> .\n\n", string(body))
@@ -553,14 +551,20 @@ func TestPOSTSPARQL(t *testing.T) {
 		response := r.Do(request)
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "2", response.RawResponse.Header.Get("Triples"))
+
+		response = r.Get("/_test/abc")
+		assert.Equal(t, 200, response.StatusCode)
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c>, <c0> .\n\n", response.Body)
 
 		request, _ = http.NewRequest("POST", "/_test/abc", strings.NewReader("DELETE DATA { <a> <b> <c> . }"))
 		request.Header.Add("Content-Type", "application/sparql-update")
 		response = r.Do(request)
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "1", response.RawResponse.Header.Get("Triples"))
+
+		response = r.Get("/_test/abc")
+		assert.Equal(t, 200, response.StatusCode)
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c0> .\n\n", response.Body)
 	})
 }
 
@@ -569,19 +573,18 @@ func TestPOSTTurtle(t *testing.T) {
 		response := r.Post("/_test/abc", "text/turtle", "<a> <b> <c1> .")
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "2", response.RawResponse.Header.Get("Triples"))
+
+		response = r.Get("/_test/abc")
+		assert.Equal(t, 200, response.StatusCode)
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c0>, <c1> .\n\n", response.Body)
 
 		response = r.Post("/_test/abc", "text/turtle", "<a> <b> <c2> .")
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "3", response.RawResponse.Header.Get("Triples"))
 
-		request, _ := http.NewRequest("GET", "/_test/abc", nil)
-		request.Header.Add("Accept", "text/turtle")
-		response = r.Do(request)
+		response = r.Get("/_test/abc")
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "3", response.RawResponse.Header.Get("Triples"))
-		assert.Equal(t, response.Body, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c0>, <c1>, <c2> .\n\n")
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c0>, <c1>, <c2> .\n\n", response.Body)
 	})
 }
 
@@ -598,7 +601,6 @@ func TestPATCHJson(t *testing.T) {
 		response = r.Do(request)
 		assert.Equal(t, 200, response.StatusCode)
 		assert.Equal(t, response.Body, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<a>\n    <b> <c> .\n\n")
-		assert.Equal(t, response.RawResponse.Header.Get("Triples"), "1")
 	})
 }
 
@@ -611,12 +613,10 @@ func TestPATCHSPARQL(t *testing.T) {
 		response := r.Do(request)
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "0", response.RawResponse.Header.Get("Triples"))
 
-		request, _ = http.NewRequest("GET", "/_test/abc", nil)
-		request.Header.Add("Accept", "text/turtle")
-		response = r.Do(request)
+		response = r.Get("/_test/abc")
 		assert.Equal(t, 200, response.StatusCode)
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n", response.Body)
 	})
 }
 
@@ -628,7 +628,10 @@ func TestPATCHFailParse(t *testing.T) {
 		response := r.Do(request)
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "0", response.RawResponse.Header.Get("Triples"))
+
+		response = r.Get("/_test/abc")
+		assert.Equal(t, 200, response.StatusCode)
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n", response.Body)
 	})
 }
 
@@ -653,7 +656,6 @@ func TestHEAD(t *testing.T) {
 		response := r.Do(request)
 		assert.Empty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "2", response.RawResponse.Header.Get("Triples"))
 		assert.NotEmpty(t, response.RawResponse.Header.Get("Content-Length"))
 	})
 }
@@ -704,8 +706,8 @@ func TestCTypeServeDefault(t *testing.T) {
 		assert.NotEmpty(t, response.Body)
 		assert.Equal(t, 200, response.StatusCode)
 		assert.Contains(t, "text/turtle", response.RawResponse.Header.Get("Content-Type"))
-		assert.Equal(t, "2", response.RawResponse.Header.Get("Triples"))
 		assert.NotEmpty(t, response.RawResponse.Header.Get("Content-Length"))
+		assert.Equal(t, "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n<d>\n    <e> <f> ;\n    <h> <i> .\n\n", response.Body)
 	})
 }
 
@@ -824,7 +826,6 @@ func TestGetJsonLd(t *testing.T) {
 		request.Header.Add("Accept", "application/ld+json")
 		response := r.Do(request)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "1", response.RawResponse.Header.Get("Triples"))
 		d := r.Url("/_test/d")
 		e := r.Url("/_test/e")
 		f := r.Url("/_test/f")
@@ -834,7 +835,6 @@ func TestGetJsonLd(t *testing.T) {
 		request.Header.Add("Accept", "application/ld+json")
 		response = r.Do(request)
 		assert.Equal(t, 200, response.StatusCode)
-		assert.Equal(t, "9", response.RawResponse.Header.Get("Triples"))
 	})
 }
 

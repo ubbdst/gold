@@ -90,12 +90,12 @@ func (s *Server) pathInfo(path string) (*pathInfo, error) {
 		res.File = s.Config.DataRoot + p.Path
 	}
 
-	if strings.HasSuffix(p.Path, ",acl") {
+	if strings.HasSuffix(p.Path, ACLSuffix) {
 		res.AclURI = res.URI
 		res.AclFile = res.File
 		res.MetaURI = res.URI
 		res.MetaFile = res.File
-	} else if strings.HasSuffix(p.Path, ",meta") || strings.HasSuffix(p.Path, ",meta/") {
+	} else if strings.HasSuffix(p.Path, METASuffix) {
 		res.AclURI = res.URI + ACLSuffix
 		res.AclFile = res.File + ACLSuffix
 		res.MetaURI = res.URI

@@ -24,13 +24,13 @@ const (
 	// HCType is the header Content-Type
 	HCType = "Content-Type"
 	// METASuffix is the generic name for metadata corresponding to a given resource
-	METASuffix = ",meta"
+	METASuffix = ".meta"
 	// ACLSuffix is the generic name for the acl corresponding to a given resource
-	ACLSuffix = ",acl"
+	ACLSuffix = ".acl"
 	// SystemPrefix is the generic name for the system-reserved namespace (e.g. APIs)
-	SystemPrefix = ",system"
+	SystemPrefix = ".system"
 	// ProxyPath provides CORS proxy (empty to disable)
-	ProxyPath = ",proxy"
+	ProxyPath = ".proxy"
 )
 
 var (
@@ -229,7 +229,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 
 	// CORS
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Expose-Headers", "User, Triples, Location, Link, Vary, Last-Modified, Content-Length")
+	w.Header().Set("Access-Control-Expose-Headers", "User, Location, Link, Vary, Last-Modified, Content-Length")
 	w.Header().Set("Access-Control-Max-Age", "1728000")
 
 	// RWW
@@ -291,7 +291,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 
 	// generic headers
 	w.Header().Set("Accept-Patch", "application/json, application/sparql-update")
-	w.Header().Set("Accept-Post", "text/turtle, application/json")
+	w.Header().Set("Accept-Post", "text/turtle, application/ld+json, application/json")
 	w.Header().Set("Allow", strings.Join(methodsAll, ", "))
 
 	switch req.Method {
@@ -545,6 +545,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 
 											scanner := bufio.NewScanner(fd)
 
+											//@@TODO don't sniff
 											// stop after the first line
 											for scanner.Scan() {
 												if strings.HasPrefix(scanner.Text(), "@prefix") {
@@ -621,19 +622,19 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 			}
 		}
 
+		if req.Method == "HEAD" {
+			w.Header().Set(HCType, magicType)
+			return r.respond(status)
+		}
+
+		//@@TODO don't sniff
 		if maybeRDF {
 			g.ReadFile(resource.File)
 			if g.Len() == 0 {
 				maybeRDF = false
 			} else {
 				w.Header().Set(HCType, contentType)
-				w.Header().Set("Triples", fmt.Sprintf("%d", g.Len()))
 			}
-		}
-
-		if req.Method == "HEAD" {
-			w.Header().Set(HCType, magicType)
-			return r.respond(status)
 		}
 
 		if !maybeRDF && len(magicType) > 0 {
@@ -750,7 +751,6 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 
 			onUpdateURI(resource.URI)
 
-			w.Header().Set("Triples", fmt.Sprintf("%d", g.Len()))
 			return r.respond(200)
 		}
 
@@ -955,7 +955,6 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 						s.debug.Println("Wrote resource file: " + resource.File)
 					}
 				}
-				w.Header().Set("Triples", fmt.Sprintf("%d", g.Len()))
 			} else {
 				f, err := os.OpenFile(resource.File, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 				if err != nil {
@@ -1042,6 +1041,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 		}
 		defer f.Close()
 
+		//@@TODO don't sniff
 		if dataHasParser {
 			g := NewGraph(resource.URI)
 			g.Parse(req.Body, dataMime)
@@ -1049,7 +1049,6 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 			if err != nil {
 				s.debug.Println("PUT g.WriteFile err: " + err.Error())
 			}
-			w.Header().Set("Triples", fmt.Sprintf("%d", g.Len()))
 		}
 		_, err = io.Copy(f, req.Body)
 		if err != nil {
