@@ -152,6 +152,7 @@ type Server struct {
 	cookieSalt []byte
 	debug      *log.Logger
 	webdav     *webdav.Handler
+	req        *httpRequest
 }
 
 // NewServer is used to create a new Server instance
@@ -224,6 +225,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 	r = new(response)
 	var err error
+	// Add the request object to server
+	s.req = req
 
 	s.debug.Println("\n------ New " + req.Method + " request from " + req.RemoteAddr + " ------")
 
@@ -319,7 +322,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 		w.Header().Add("Link", brack("http://www.w3.org/ns/ldp#Resource")+"; rel=\"type\"")
 
 		// set API Link headers
-		//@@TODO create the vocabulary
+		//@@TODO replace example.org with a real vocabulary
 		w.Header().Add("Link", brack(resource.Base+"/"+SystemPrefix+"/newCert")+"; rel=\"http://example.org/services#newCert\"")
 		w.Header().Add("Link", brack(resource.Base+"/"+SystemPrefix+"/accountRecovery")+"; rel=\"http://example.org/services#accountRecovery\"")
 		w.Header().Add("Link", brack(resource.Base+"/"+SystemPrefix+"/newAccount")+"; rel=\"http://example.org/services#newAccount\"")
@@ -501,7 +504,7 @@ func (s *Server) handle(w http.ResponseWriter, req *httpRequest) (r *response) {
 					if infos, err := ioutil.ReadDir(resource.File); err == nil {
 						var _s Term
 						for _, info := range infos {
-							if info != nil {
+							if info != nil && !strings.HasSuffix(info.Name(), ACLSuffix) && !strings.HasSuffix(info.Name(), METASuffix) {
 								res := resource.URI + info.Name()
 								if info.IsDir() {
 									res += "/"
